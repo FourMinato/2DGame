@@ -27,6 +27,11 @@ public class LevelSelection implements GLEventListener {
     private Texture level3Texture;
     private Texture mainPageTexture;
     private Texture backgroundTexture;
+    private MainPage mainPage;
+
+    public LevelSelection(MainPage mainPage) {
+        this.mainPage = mainPage;
+    }
 
     // Inner class for texture loading
     private static class TextureLoader {
@@ -43,15 +48,18 @@ public class LevelSelection implements GLEventListener {
 
     @Override
     public void init(GLAutoDrawable drawable) {
+        
         GL2 gl = drawable.getGL().getGL2();
         gl.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-        // Load textures using the inner class
-        level1Texture = TextureLoader.loadTexture(gl, "D:\\Computer Graphics\\Project2D\\level1.png");
-        level2Texture = TextureLoader.loadTexture(gl, "D:\\Computer Graphics\\Project2D\\level2.png");
-        level3Texture = TextureLoader.loadTexture(gl, "D:\\Computer Graphics\\Project2D\\level3.png");
-        mainPageTexture = TextureLoader.loadTexture(gl, "D:\\Computer Graphics\\Project2D\\Back.png");
-        backgroundTexture = TextureLoader.loadTexture(gl, "D:\\Computer Graphics\\Project2D\\BG_Level.jpg");
+        
+        // ไปแก้ Path อยู่ที่ MainPage ทำไว้แบบใช้ทุกคลาสแล้ว
+        String imagePath = MainPage.filePath;
+        level1Texture = TextureLoader.loadTexture(gl, imagePath + "level1.png");
+        level2Texture = TextureLoader.loadTexture(gl, imagePath + "level2.png");
+        level3Texture = TextureLoader.loadTexture(gl, imagePath + "level3.png");
+        mainPageTexture = TextureLoader.loadTexture(gl, imagePath + "Back.png");
+        backgroundTexture = TextureLoader.loadTexture(gl, imagePath + "bgSelect.jpg");
 
         levelButtons = new ArrayList<>();
         int buttonWidth = 100;
@@ -74,6 +82,8 @@ public class LevelSelection implements GLEventListener {
         mainPageButtonRect = new Rectangle2D.Float(mainPageButtonX, mainPageButtonY,
                 mainPageButtonWidth, mainPageButtonHeight);
 
+                
+
         // Mouse listener
         Randers.getWindow().addMouseListener(new MouseAdapter() {
             @Override
@@ -89,12 +99,15 @@ public class LevelSelection implements GLEventListener {
                         SwingUtilities.invokeLater(() -> {
                             switch (selectedLevel) {
                                 case 1:
+                                    mainPage.stopBackgroundMusic();
                                     Randers.setGLEventListener(new Robot(new MazeLV_1(), selectedLevel));
                                     break;
                                 case 2:
+                                    mainPage.stopBackgroundMusic();
                                     Randers.setGLEventListener(new Robot(new MazeLV_2(), selectedLevel));
                                     break;
                                 case 3:
+                                    mainPage.stopBackgroundMusic();
                                     Randers.setGLEventListener(new Robot(new MazeLV_3(), selectedLevel));
                                     break;
                             }

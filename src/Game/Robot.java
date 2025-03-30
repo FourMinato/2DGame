@@ -18,6 +18,12 @@ import java.awt.geom.Rectangle2D;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.Clip;
+import javax.sound.sampled.LineUnavailableException;
+import javax.sound.sampled.UnsupportedAudioFileException;
+
 public class Robot implements GLEventListener {
     private Texture mainPageButtonTexture;
     private Texture pauseButtonTexture;
@@ -26,7 +32,7 @@ public class Robot implements GLEventListener {
 
     private float x, y;
     private final float width = 50, height = 50;
-    private final float speed = 10.0f;
+    private final float speed = 50.0f;
 
     private int screenWidth, screenHeight;
     private int health = 3;
@@ -56,6 +62,13 @@ public class Robot implements GLEventListener {
     private Rectangle2D nextButtonRect;
     private Texture backgroundTexture;
 
+    // ไปแก้ Path อยู่ที่ MainPage ทำไว้แบบใช้ทุกคลาสแล้ว
+    String imagePath = MainPage.filePath;
+    private Clip gameMusic;
+    private MainPage mainPage;
+    private Clip winSound;
+    private Clip loseSound;
+
     public Robot(Maze maze, int level) {
         this.maze = maze;
         this.level = level;
@@ -65,7 +78,7 @@ public class Robot implements GLEventListener {
 
     private void loadRobotTexture() {
         try {
-            File robotFile = new File("D:\\Computer Graphics\\Project2D\\Human.jpg");
+            File robotFile = new File(imagePath + "Human.jpg");
             if (robotFile.exists()) {
                 robotTexture = TextureIO.newTexture(robotFile, true);
                 System.out.println("Robot texture loaded successfully");
@@ -102,11 +115,32 @@ public class Robot implements GLEventListener {
                     System.out.println("🎉 Game Win! 🎉");
                     gameOver = true;
                     hasWon = true;
+
+                    // ตรวจสอบก่อนหยุดเสียงเพื่อป้องกันการเรียกซ้ำ
+                    if (gameMusic != null && gameMusic.isRunning()) {
+                        gameMusic.stop();
+                    }
+
+                    if (winSound != null) {
+                        winSound.setFramePosition(0);
+                        winSound.start();
+                    }
                     // Display the Next button
                     if (level < 3) {
                         nextButtonRect.setRect((screenWidth - 100) / 2, screenHeight / 2 + -100, 100, 50);
                     }
                 } else {
+                    // ตรวจสอบก่อนหยุดเสียงเพื่อป้องกันการเรียกซ้ำ
+                    if (gameMusic != null && gameMusic.isRunning()) {
+                        gameMusic.stop();
+                    }
+
+                    // ตรวจสอบว่าเสียง lose ไม่ได้เล่นอยู่แล้วก่อนเล่นใหม่
+                    if (loseSound != null && !loseSound.isRunning()) {
+                        loseSound.setFramePosition(0);
+                        loseSound.start();
+                    }
+
                     System.out.println("🚫 Need to collect " + getRemainingItemsCount() + " more items!");
                     gameOver = true;
                     hasWon = false;
@@ -122,9 +156,21 @@ public class Robot implements GLEventListener {
         }
     }
 
+    private Clip itemCollectSound;
+    private Clip damageSound; // New variable for damage sound
+
     private void checkItemCollisions() {
         for (Item item : items) {
+            boolean wasCollected = item.isCollected();
             item.checkCollision(x, y, width, height);
+
+            // Play sound if item was just collected
+            if (!wasCollected && item.isCollected()) {
+                if (itemCollectSound != null) {
+                    itemCollectSound.setFramePosition(0);
+                    itemCollectSound.start();
+                }
+            }
         }
     }
 
@@ -151,10 +197,27 @@ public class Robot implements GLEventListener {
         health--;
         System.out.println("หุ่นยนต์ชนผนัง! ชีวิตที่เหลือ: " + health);
 
+        // Play damage sound when health is reduced
+        if (damageSound != null) {
+            damageSound.setFramePosition(0);
+            damageSound.start();
+        }
+
         if (health <= 0) {
             gameOver = true;
             hasWon = false;
             System.out.println("Game Over!");
+
+            // ตรวจสอบก่อนหยุดเสียงเพื่อป้องกันการเรียกซ้ำ
+            if (gameMusic != null && gameMusic.isRunning()) {
+                gameMusic.stop();
+            }
+
+            // ตรวจสอบว่าเสียง lose ไม่ได้เล่นอยู่แล้วก่อนเล่นใหม่
+            if (loseSound != null && !loseSound.isRunning()) {
+                loseSound.setFramePosition(0);
+                loseSound.start();
+            }
         } else {
             resetPosition();
         }
@@ -173,6 +236,14 @@ public class Robot implements GLEventListener {
         for (Item item : items) {
             item.reset(mazeOffsetX, mazeOffsetY, width, height, maze);
         }
+
+        // ตรวจสอบสถานะเสียงก่อนเริ่มใหม่
+        if (gameMusic != null && !gameMusic.isRunning()) {
+            gameMusic.setFramePosition(0);
+            gameMusic.loop(Clip.LOOP_CONTINUOUSLY);
+            gameMusic.start();
+        }
+
         System.out.println("เริ่มเกมใหม่!");
     }
 
@@ -189,12 +260,12 @@ public class Robot implements GLEventListener {
         // Load textures
         try {
             // Wall texture
-            File wallFile = new File("D:\\Computer Graphics\\Project2D\\wall.jpg");
+            File wallFile = new File(imagePath + "wall.jpg");
             if (wallFile.exists()) {
                 wallTexture = TextureIO.newTexture(wallFile, true);
             }
 
-            File heartFile = new File("D:\\Computer Graphics\\Project2D\\heart.png");
+            File heartFile = new File(imagePath + "heart.png");
             if (heartFile.exists()) {
                 heartTexture = TextureIO.newTexture(heartFile, true);
                 heartTexture.setTexParameteri(gl, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
@@ -205,24 +276,68 @@ public class Robot implements GLEventListener {
 
             // Button textures
             mainPageButtonTexture = TextureIO.newTexture(
-                    new File("D:\\Computer Graphics\\Project2D\\Back.png"), true);
+                    new File(imagePath + "Back.png"), true);
             pauseButtonTexture = TextureIO.newTexture(
-                    new File("D:\\Computer Graphics\\Project2D\\Pause.png"), true);
+                    new File(imagePath + "Pause.png"), true);
             restartButtonTexture = TextureIO.newTexture(
-                    new File("D:\\Computer Graphics\\Project2D\\reset.png"), true);
+                    new File(imagePath + "reset.png"), true);
             levelSelectionButtonTexture = TextureIO.newTexture(
-                    new File("D:\\Computer Graphics\\Project2D\\menu.png"), true);
+                    new File(imagePath + "menu.png"), true);
             nextButtonTexture = TextureIO.newTexture(
-                    new File("D:\\Computer Graphics\\Project2D\\Next.png"), true);
+                    new File(imagePath + "Next.png"), true);
 
             // Background texture
-            File backgroundFile = new File("D:\\Computer Graphics\\Project2D\\BG_Maze.jpg");
+            File backgroundFile = new File(imagePath + "BG_Maze.jpg");
             if (backgroundFile.exists()) {
                 backgroundTexture = TextureIO.newTexture(backgroundFile, true);
             }
         } catch (IOException e) {
             System.err.println("Failed to load textures: " + e.getMessage());
             e.printStackTrace();
+        }
+
+        try {
+            File musicFile = new File(imagePath + "bgMoze.wav");
+            AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(musicFile);
+            gameMusic = AudioSystem.getClip();
+            gameMusic.open(audioInputStream);
+            gameMusic.loop(Clip.LOOP_CONTINUOUSLY);
+            gameMusic.start();
+        } catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
+            System.err.println("Error loading game music: " + ((Throwable) e).getMessage());
+        }
+
+        try {
+            File winSoundFile = new File(imagePath + "win.wav");
+            AudioInputStream winAudioInputStream = AudioSystem.getAudioInputStream(winSoundFile);
+            winSound = AudioSystem.getClip();
+            winSound.open(winAudioInputStream);
+        } catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
+            System.err.println("Error loading movement sound: " + e.getMessage());
+        }
+        try {
+            File itemSoundFile = new File(imagePath + "collect.wav");
+            AudioInputStream itemAudioInputStream = AudioSystem.getAudioInputStream(itemSoundFile);
+            itemCollectSound = AudioSystem.getClip();
+            itemCollectSound.open(itemAudioInputStream);
+        } catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
+            System.err.println("Error loading item collection sound: " + e.getMessage());
+        }
+        try {
+            File damageSoundFile = new File(imagePath + "classic_hurt.wav");
+            AudioInputStream damageAudioInputStream = AudioSystem.getAudioInputStream(damageSoundFile);
+            damageSound = AudioSystem.getClip();
+            damageSound.open(damageAudioInputStream);
+        } catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
+            System.err.println("Error loading damage sound: " + e.getMessage());
+        }
+        try {
+            File loseSoundFile = new File(imagePath + "gameOver.wav");
+            AudioInputStream loseAudioInputStream = AudioSystem.getAudioInputStream(loseSoundFile);
+            loseSound = AudioSystem.getClip();
+            loseSound.open(loseAudioInputStream);
+        } catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
+            System.err.println("Error loading movement sound: " + e.getMessage());
         }
 
         // Button positions
@@ -256,6 +371,12 @@ public class Robot implements GLEventListener {
 
     private void handleKeyPress(KeyEvent e) {
         if (gameOver && e.getKeyCode() == KeyEvent.VK_R) {
+            // ตรวจสอบสถานะเสียงก่อนเริ่มใหม่
+            if (gameMusic != null && !gameMusic.isRunning()) {
+                gameMusic.setFramePosition(0);
+                gameMusic.loop(Clip.LOOP_CONTINUOUSLY);
+                gameMusic.start();
+            }
             restartGame();
             return;
         }
@@ -286,7 +407,7 @@ public class Robot implements GLEventListener {
         float mouseX = e.getX();
         float mouseY = screenHeight - e.getY();
 
-        // กรณีที่เกมจบและชนะ
+        // กรีที่เกมจบและชนะ
         if (gameOver && hasWon) {
             // ตรวจสอบเฉพาะปุ่ม Next
             if (level < 3 && nextButtonRect.contains(mouseX, mouseY)) {
@@ -310,7 +431,7 @@ public class Robot implements GLEventListener {
             return;
         }
 
-        // ตรวจสอบปุ่มอื่นๆ เฉพาะเมื่อไม่ได้อยู่ในสถานะเกมจบ
+        // ตรวจสอบปุ่มอื่นๆ เฉพาะเมื่อไม่ได้อยู่สถานะเกมจบ
         if (!gameOver) {
             if (mainPageButtonRect.contains(mouseX, mouseY)) {
                 goToMainPage();
@@ -319,17 +440,26 @@ public class Robot implements GLEventListener {
             } else if (restartButtonRect.contains(mouseX, mouseY)) {
                 restartGame();
             } else if (levelSelectionButtonRect.contains(mouseX, mouseY)) {
+                gameMusic.stop();
                 goToLevelSelection();
             }
         }
     }
 
     private void goToMainPage() {
+        // ตรวจสอบก่อนหยุดเสียงเพื่อป้องกันการเรียกซ้ำ
+        if (gameMusic != null && gameMusic.isRunning()) {
+            gameMusic.stop();
+        }
         Randers.setGLEventListener(new MainPage());
     }
 
     private void goToLevelSelection() {
-        Randers.setGLEventListener(new LevelSelection());
+        // ตรวจสอบก่อนหยุดเสียงเพื่อป้องกันการเรียกซ้ำ
+        if (gameMusic != null && gameMusic.isRunning()) {
+            gameMusic.stop();
+        }
+        Randers.setGLEventListener(new LevelSelection(mainPage));
     }
 
     @Override
@@ -375,7 +505,7 @@ public class Robot implements GLEventListener {
                     // วางปุ่ม Next ให้ห่างจากปุ่มอื่นๆ
                     nextButtonRect.setRect(
                             screenWidth / 2 - 50, // จัดกึ่งกลางหน้าจอ
-                            screenHeight / 2 - 100, // ลงมาด้านล่าง
+                            screenHeight / 2 - 150, // ลงมาด้านล่าง
                             100, 50);
 
                     nextButtonTexture.bind(gl);
@@ -505,7 +635,7 @@ public class Robot implements GLEventListener {
             gl.glEnd();
             gl.glDisable(GL2.GL_TEXTURE_2D);
         } else {
-            // Fallback color
+            // Fallback color - ตรงนี้ใช้สีแดงเข้ม
             gl.glColor3f(0.5f, 0.2f, 0.2f);
             gl.glBegin(GL2.GL_QUADS);
             gl.glVertex2f(x, y);
@@ -568,6 +698,10 @@ public class Robot implements GLEventListener {
             robotTexture.destroy(drawable.getGL().getGL2());
         if (textRenderer != null)
             textRenderer.dispose();
+
+        if (gameMusic != null && gameMusic.isRunning()) {
+            gameMusic.stop();
+        }
     }
 
     @Override
